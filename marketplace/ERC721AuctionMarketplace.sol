@@ -161,8 +161,9 @@ contract ERC721AuctionMarketplace is IERC721Receiver, ReentrancyGuard {
         auction.endTime = block.timestamp;
 
         if (auction.currentBidder != address(0)) {
-            payable(auction.currentBidder).transfer(auction.currentBid);
             frozenEth -= auction.currentBid;
+            (bool isRefunded, ) = payable(auction.currentBidder).call{value: auction.currentBid}("");
+            require(isRefunded, "Marketplace: failed to refund current bid");
         }
 
         emit CancelAuction(_auctionId);
