@@ -54,9 +54,7 @@ contract ERC721FixedPriceMarketplace is IERC721Receiver, ReentrancyGuard {
     }
 
     function isOnSale(ItemOnSale memory itemOnSale) internal pure returns(bool) {
-        return itemOnSale.seller != address(0) && 
-                !itemOnSale.isCanceled && 
-                !itemOnSale.isSold;
+        return !itemOnSale.isCanceled && !itemOnSale.isSold;
     }
 
     constructor() {
@@ -78,10 +76,7 @@ contract ERC721FixedPriceMarketplace is IERC721Receiver, ReentrancyGuard {
 
         require(_price > 0, "Marketplace: price must be greater than 0");
         require(_tokenAddress != address(0), "Marketplace: zero address");
-        require(
-            IERC165(_tokenAddress).supportsInterface(type(IERC721Metadata).interfaceId),
-            "Marketplace: not ERC721"
-        );
+        require(IERC165(_tokenAddress).supportsInterface(type(IERC721Metadata).interfaceId), "Marketplace: not ERC721");
 
         IERC721 token = IERC721(_tokenAddress);
 
@@ -111,16 +106,13 @@ contract ERC721FixedPriceMarketplace is IERC721Receiver, ReentrancyGuard {
 
         require(isOnSale(item), "Marketplace: this token not on sale");
         require(msg.value >= item.price, "Marketplace: not enough eth");
-        require(
-            token.ownerOf(item.tokenId) == address(this),
-            "Marketplace: token not held by marketplace"
-        );
+        require(token.ownerOf(item.tokenId) == address(this), "Marketplace: token not held by marketplace");
 
         item.isSold = true;
 
         (bool isSent, ) = payable(item.seller).call{value: item.price}("");
         require(isSent, "Marketplace: failed to send ETH to seller");
-        token.transferFrom(address(this), msg.sender, item.tokenId);
+        token.safeTransferFrom(address(this), msg.sender, item.tokenId);
 
         if (msg.value > item.price) {
             (bool isRefunded, ) = payable(msg.sender).call{value: msg.value - item.price}("");
@@ -153,10 +145,7 @@ contract ERC721FixedPriceMarketplace is IERC721Receiver, ReentrancyGuard {
 
         require(msg.sender == item.seller, "Marketplace: not seller");
         require(item.isCanceled && !item.isSold, "Marketplace: item is not canceled or still on sale");
-        require(
-            token.ownerOf(item.tokenId) == address(this),
-            "Marketplace: token not held by marketplace"
-        );
+        require(token.ownerOf(item.tokenId) == address(this), "Marketplace: token not held by marketplace");
 
         token.transferFrom(address(this), msg.sender, item.tokenId);
     }
