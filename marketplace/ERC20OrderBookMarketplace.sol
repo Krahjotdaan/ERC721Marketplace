@@ -21,7 +21,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
 
     address public owner;
     uint256 public lastOrderId;
-    bool paused;
+    bool public paused;
     mapping(uint256 => Order) public listOfOrders;
 
     event ListOrder(
