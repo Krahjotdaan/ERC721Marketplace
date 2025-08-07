@@ -10,6 +10,7 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
         uint256 tokenId;
         uint256 price;
         address seller;
+        uint256 itemOnSaleFeePercentage;
         bool isSold;
         bool isCanceled;
     }
@@ -22,9 +23,10 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
         address indexed tokenAddress,
         uint256 indexed tokenId,
         uint256 price,
-        address seller
+        address seller,
+        uint256 itemOnSaleFeePercentage
     );
-    event BuyItem(uint256 indexed _itemOnSaleId, address indexed _customer);
+    event BuyItem(uint256 indexed _itemOnSaleId, address indexed _customer, uint256 fee);
     event CancelSale(uint256 indexed _itemOnSaleId);
 
     modifier itemExists(uint256 _itemId) {
@@ -52,11 +54,19 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
             tokenId: _tokenId,
             price: _price,
             seller: msg.sender,
+            itemOnSaleFeePercentage: feePercentage,
             isSold: false,
             isCanceled: false
         });
 
-        emit ListItem(lastItemOnSaleId, _tokenAddress, _tokenId, _price, msg.sender);
+        emit ListItem({
+            itemId: lastItemOnSaleId,
+            tokenAddress: _tokenAddress,
+            tokenId: _tokenId,
+            price: _price,
+            seller: msg.sender,
+            itemOnSaleFeePercentage: feePercentage
+        });
     }
 
     function buyItem(uint256 _itemId) external payable nonReentrant whenNotPaused itemExists(_itemId) {
@@ -69,16 +79,22 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
 
         item.isSold = true;
 
-        (bool sent, ) = payable(item.seller).call{value: item.price}("");
+        uint256 _fee = countFee(item.price, item.itemOnSaleFeePercentage);
+
+        (bool sent, ) = payable(item.seller).call{value: item.price - _fee}("");
         require(sent, "Marketplace: failed to send ETH");
+
         token.safeTransferFrom(address(this), msg.sender, item.tokenId);
+
+        (bool feeSent, ) = payable(feeRecipient).call{value: _fee}("");
+        require(feeSent, "Marketplace: failed to send fee");
 
         if (msg.value > item.price) {
             (bool refunded, ) = payable(msg.sender).call{value: msg.value - item.price}("");
             require(refunded, "Marketplace: failed to refund");
         }
 
-        emit BuyItem(_itemId, msg.sender);
+        emit BuyItem(_itemId, msg.sender, _fee);
     }
 
     function cancel(uint256 _itemId) external whenNotPaused itemExists(_itemId) {

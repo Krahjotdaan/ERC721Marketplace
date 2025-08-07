@@ -15,12 +15,15 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         uint256 price;
         uint256 tokensOnSale;
         uint256 cancelledTokens;
+        uint256 orderFeePercentage;
         bool isSold;
         bool isCancelled;
     }
 
     address public owner;
     uint256 public lastOrderId;
+    uint256 public feePercentage; // base 10000 (e.x. 250 = 2,5%)
+    address public feeRecipient;
     bool public paused;
     mapping(uint256 => Order) public listOfOrders;
 
@@ -29,7 +32,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         address indexed seller, 
         address indexed tokenAddress, 
         uint256 price, 
-        uint256 amount
+        uint256 amount,
+        uint256 orderFeePercentage
     );
     event ChangePrice(uint256 indexed orderId, uint256 indexed oldPrice, uint256 indexed newPrice);
     event Purchase(
@@ -38,12 +42,15 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         address indexed customer, 
         uint256 price, 
         uint256 amount,
+        uint256 fee,
         bool isSold
     );
     event Cancel(uint256 indexed orderId, uint256 indexed amount, bool indexed isCancelled);
     event WithdrawTokens(uint256 indexed orderId, address indexed seller, uint256 indexed amount);
     event Paused(bool indexed paused);
     event Withdraw(uint256 indexed amount);
+    event SetFeePercentage(uint256 indexed oldFeePercentage, uint256 indexed newFeePercentage);
+    event SetFeeRecepient(address indexed oldFeeRecepient, address indexed newFeeRecepient);
 
     modifier validPrice(uint256 _price) {
         require(_price > 0, "Marketplace: price must be over 0");
@@ -76,6 +83,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
 
     constructor() {
         owner = msg.sender;
+        feePercentage = 250;
+        feeRecipient = owner;
     }
 
     receive() external payable {}
@@ -109,6 +118,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             price: _price,
             tokensOnSale: _amount,
             cancelledTokens: 0,
+            orderFeePercentage: feePercentage,
             isSold: false,
             isCancelled: false
         });
@@ -118,7 +128,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             seller: msg.sender,
             tokenAddress: _tokenAddress,
             price: _price,
-            amount: _amount
+            amount: _amount,
+            orderFeePercentage: feePercentage
         });
     }
 
@@ -154,10 +165,15 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             order.isSold = true;
         }
 
-        (bool sent, ) = payable(order.seller).call{value: requiredEth}("");
+        uint256 _fee = countFee(requiredEth, order.orderFeePercentage);
+
+        (bool sent, ) = payable(order.seller).call{value: requiredEth - _fee}("");
         require(sent, "Marketplace: failed to send ETH");
 
         token.safeTransfer(msg.sender, _amount);
+
+        (bool feeSent, ) = payable(feeRecipient).call{value: _fee}("");
+        require(feeSent, "Marketplace: failed to send fee");
 
         if (msg.value > requiredEth) {
             (bool refunded, ) = payable(msg.sender).call{value: msg.value - requiredEth}("");
@@ -170,6 +186,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             customer: msg.sender,
             price: order.price,
             amount: _amount,
+            fee: _fee,
             isSold: order.isSold
         });
     }
@@ -209,5 +226,31 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
     function setPaused(bool _paused) external onlyOwner {
         paused = _paused;
         emit Paused(paused);
+    }
+
+    function setFeePercentage(uint256 _feePercentage) external onlyOwner {
+        require(_feePercentage <= 1000, "Marketplace: fee percentage too high (max 10%)");
+        uint256 oldFeePercentage = feePercentage;
+        feePercentage = _feePercentage;
+
+        emit SetFeePercentage(oldFeePercentage, feePercentage);
+    }
+
+    function setFeeRecepient(address _feeRecepient) external onlyOwner {
+        require(_feeRecepient != address(0), "Marketplace: zero address");
+        require(_feeRecepient != feeRecipient, "Marketplace: same recipient");
+        
+        address oldFeeRecepient = feeRecipient;
+        feeRecipient = _feeRecepient;
+
+        emit SetFeeRecepient(oldFeeRecepient, feeRecipient);
+    }
+
+    function countFee(uint256 _totalPrice, uint256 _orderFee) internal pure returns(uint256) {
+        uint256 minFee = 0.000001 ether;
+        uint256 fee = _totalPrice * _orderFee / 10000;
+        fee = fee < minFee ? minFee : fee;
+
+        return fee;
     }
 }

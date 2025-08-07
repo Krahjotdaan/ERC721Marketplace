@@ -9,11 +9,15 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 abstract contract ERC721MarketplaceBase is IERC721Receiver, ReentrancyGuard {
     address public owner;
+    uint256 public feePercentage; // base 10000 (e.x. 250 = 2,5%)
+    address public feeRecipient;
     bool public paused;
 
     event Paused(bool indexed paused);
     event Withdraw(uint256 indexed amount);
     event WithdrawToken(address indexed _tokenAddress, uint256 indexed _tokenId, address indexed seller);
+    event SetFeePercentage(uint256 indexed oldFeePercentage, uint256 indexed newFeePercentage);
+    event SetFeeRecepient(address indexed oldFeeRecepient, address indexed newFeeRecepient);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Marketplace: not owner");
@@ -27,6 +31,8 @@ abstract contract ERC721MarketplaceBase is IERC721Receiver, ReentrancyGuard {
 
     constructor() {
         owner = msg.sender;
+        feePercentage = 250;
+        feeRecipient = owner;
     }
 
     receive() external payable {}
@@ -62,5 +68,31 @@ abstract contract ERC721MarketplaceBase is IERC721Receiver, ReentrancyGuard {
     function setPaused(bool _paused) external onlyOwner {
         paused = _paused;
         emit Paused(_paused);
+    }
+
+    function setFeePercentage(uint256 _feePercentage) external onlyOwner {
+        require(_feePercentage <= 1000, "Marketplace: fee percentage too high (max 10%)");
+        uint256 oldFeePercentage = feePercentage;
+        feePercentage = _feePercentage;
+
+        emit SetFeePercentage(oldFeePercentage, feePercentage);
+    }
+
+    function setFeeRecepient(address _feeRecepient) external onlyOwner {
+        require(_feeRecepient != address(0), "Marketplace: zero address");
+        require(_feeRecepient != feeRecipient, "Marketplace: same recipient");
+        
+        address oldFeeRecepient = feeRecipient;
+        feeRecipient = _feeRecepient;
+
+        emit SetFeeRecepient(oldFeeRecepient, feeRecipient);
+    }
+
+    function countFee(uint256 _totalPrice, uint256 _orderFee) internal pure returns(uint256) {
+        uint256 minFee = 0.000001 ether;
+        uint256 fee = _totalPrice * _orderFee / 10000;
+        fee = fee < minFee ? minFee : fee;
+        
+        return fee;
     }
 }

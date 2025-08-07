@@ -14,6 +14,7 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
         uint256 startPrice;
         uint256 currentBid;
         address currentBidder;
+        uint256 auctionFeePercentage;
         bool isCanceled;
         bool isCompleted;
     }
@@ -22,10 +23,16 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
     uint256 public frozenEth;
     mapping(uint256 => Auction) public listOfAuctions;
 
-    event CreateAuction(uint256 indexed _itemId, address indexed _tokenAddress, uint256 indexed _tokenId, uint256 _startPrice);
-    event MakeBid(uint256 indexed _auctionId, address indexed _bidder, uint256 indexed _newBid);
-    event CancelAuction(uint256 indexed _auctionId);
-    event CompleteAuction(uint256 indexed _auctionId, address indexed _customer, uint256 indexed _price);
+    event CreateAuction(
+        uint256 indexed itemId, 
+        address indexed tokenAddress, 
+        uint256 indexed tokenId, 
+        uint256 startPrice,
+        uint256 auctionFeePercentage
+    );
+    event MakeBid(uint256 indexed auctionId, address indexed bidder, uint256 indexed newBid);
+    event CancelAuction(uint256 indexed auctionId);
+    event CompleteAuction(uint256 indexed auctionId, address indexed customer, uint256 indexed price, uint256 fee);
 
     modifier auctionExists(uint256 _auctionId) {
         require(_auctionId > 0 && _auctionId <= lastAuctionId, "Marketplace: auction does not exist");
@@ -64,11 +71,12 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
             startPrice: _startPrice,
             currentBid: 0,
             currentBidder: address(0),
+            auctionFeePercentage: feePercentage,
             isCanceled: false,
             isCompleted: false
         });
 
-        emit CreateAuction(lastAuctionId, _tokenAddress, _tokenId, _startPrice);
+        emit CreateAuction(lastAuctionId, _tokenAddress, _tokenId, _startPrice, feePercentage);
     }
 
     function makeBid(uint256 _auctionId) external payable nonReentrant whenNotPaused auctionExists(_auctionId) {
@@ -135,16 +143,25 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
 
         auction.isCompleted = true;
 
+        uint256 _fee;
+
         if (auction.currentBidder == address(0)) {
             token.transferFrom(address(this), auction.seller, auction.tokenId);
+            _fee = 0;
         } 
         else {
-            (bool sent, ) = payable(auction.seller).call{value: auction.currentBid}("");
+            _fee = countFee(auction.currentBid, auction.auctionFeePercentage);
+
+            (bool sent, ) = payable(auction.seller).call{value: auction.currentBid - _fee}("");
             require(sent, "Marketplace: failed to send ETH");
             frozenEth -= auction.currentBid;
+            
             token.safeTransferFrom(address(this), auction.currentBidder, auction.tokenId);
+
+            (bool feeSent, ) = payable(feeRecipient).call{value: _fee}("");
+            require(feeSent, "Marketplace: failed to send fee");
         }
 
-        emit CompleteAuction(_auctionId, auction.currentBidder, auction.currentBid);
+        emit CompleteAuction(_auctionId, auction.currentBidder, auction.currentBid, _fee);
     }
 }
