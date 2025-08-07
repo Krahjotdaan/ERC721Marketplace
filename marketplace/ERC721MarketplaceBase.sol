@@ -91,7 +91,12 @@ abstract contract ERC721MarketplaceBase is IERC721Receiver, ReentrancyGuard {
     function countFee(uint256 _totalPrice, uint256 _orderFee) internal pure returns(uint256) {
         uint256 minFee = 0.000001 ether;
         uint256 fee = _totalPrice * _orderFee / 10000;
-        fee = fee < minFee ? minFee : fee;
+        if (fee < minFee) {
+            fee = minFee;
+        }
+        if (fee > _totalPrice) {
+            fee = _totalPrice;
+        }
         
         return fee;
     }
