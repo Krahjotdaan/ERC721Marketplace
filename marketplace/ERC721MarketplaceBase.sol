@@ -11,6 +11,10 @@ abstract contract ERC721MarketplaceBase is IERC721Receiver, ReentrancyGuard {
     address public owner;
     bool public paused;
 
+    event Paused(bool indexed paused);
+    event Withdraw(uint256 indexed amount);
+    event WithdrawToken(address indexed _tokenAddress, uint256 indexed _tokenId, address indexed seller);
+
     modifier onlyOwner() {
         require(msg.sender == owner, "Marketplace: not owner");
         _;
@@ -48,10 +52,15 @@ abstract contract ERC721MarketplaceBase is IERC721Receiver, ReentrancyGuard {
     }
 
     function withdraw() external virtual onlyOwner {
-        payable(msg.sender).transfer(address(this).balance);
+        uint256 amount = address(this).balance;
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "Marketplace: failed to send ETH");
+        
+        emit Withdraw(amount);
     }
 
     function setPaused(bool _paused) external onlyOwner {
         paused = _paused;
+        emit Paused(_paused);
     }
 }

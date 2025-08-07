@@ -11,7 +11,7 @@ contract ERC721Test is ERC721, ERC721Burnable, Ownable {
     string baseUri;
 
     constructor(address initialOwner, string memory _baseUri)
-        ERC721("MyToken", "MTK")
+        ERC721("TestToken", "TTK")
         Ownable(initialOwner)
     {
         baseUri = _baseUri;

@@ -99,5 +99,7 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
         require(token.ownerOf(item.tokenId) == address(this), "Marketplace: token not held");
 
         token.transferFrom(address(this), msg.sender, item.tokenId);
+
+        emit WithdrawToken(item.tokenAddress, item.tokenId, msg.sender);
     }
 }

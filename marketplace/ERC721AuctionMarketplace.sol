@@ -32,12 +32,16 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
         _;
     }
 
-    function withdraw() external override onlyOwner {
-        payable(msg.sender).transfer(address(this).balance - frozenEth);
-    }
-
     function isOnAuction(Auction memory auction) internal pure returns (bool) {
         return !auction.isCanceled && !auction.isCompleted;
+    }
+
+    function withdraw() external override onlyOwner {
+        uint256 amount = address(this).balance - frozenEth;
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "Marketplace: failed to send ETH");
+        
+        emit Withdraw(amount);
     }
 
     function createAuction(address _tokenAddress, uint256 _tokenId, uint256 _startPrice) external whenNotPaused {
@@ -117,6 +121,8 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
         require(token.ownerOf(auction.tokenId) == address(this), "Marketplace: token not held");
 
         token.transferFrom(address(this), msg.sender, auction.tokenId);
+
+        emit WithdrawToken(auction.tokenAddress, auction.tokenId, msg.sender);
     }
 
     function completeAuction(uint256 _auctionId) external nonReentrant whenNotPaused auctionExists(_auctionId) {
