@@ -8,6 +8,7 @@ abstract contract BaseFeeCalculator {
     address public feeRecipient;
     uint256 public feePercentage; 
     uint256 public minFeeInUSD; 
+    uint256 public maxFeePercentage = 1000;
     AggregatorV3Interface public priceFeed;
 
     event FeePercentageChanged(uint256 indexed oldPercentage, uint256 indexed newPercentage);
@@ -26,7 +27,7 @@ abstract contract BaseFeeCalculator {
         address _priceFeed
     ) {
         require(_feeRecipient != address(0), "Calculator: zero address");
-        require(_feePercentage <= 10000, "Calculator: invalid percentage");
+        require(_feePercentage <= maxFeePercentage, "Calculator: invalid percentage");
         require(_minFeeInUSD > 0, "Calculator: min fee must be > 0");
         
         feeRecipient = _feeRecipient;
@@ -54,7 +55,7 @@ abstract contract BaseFeeCalculator {
     }
 
     function setFeePercentage(uint256 _feePercentage) external calcOnlyOwner {
-        require(_feePercentage <= 10000, "Calculator: invalid percentage");
+        require(_feePercentage <= maxFeePercentage, "Calculator: invalid percentage");
 
         uint256 oldPercentage = feePercentage;
         feePercentage = _feePercentage;
