@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
@@ -45,7 +46,7 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard, ERC
     }
 
     function isERC721(address _tokenAddress) internal view returns (bool) {
-        try IERC165(_tokenAddress).supportsInterface(type(IERC721Metadata).interfaceId) returns (bool result) {
+        try IERC165(_tokenAddress).supportsInterface(type(IERC721).interfaceId) returns (bool result) {
             return result;
         } 
         catch {
@@ -73,5 +74,18 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard, ERC
     function setPaused(bool _paused) external onlyOwner {
         paused = _paused;
         emit Paused(_paused);
+    }
+
+    function getERC721Metadata(
+        address _tokenAddress, 
+        uint256 _tokenId
+    ) external view returns(string memory, string memory, string memory) {
+        try IERC165(_tokenAddress).supportsInterface(type(IERC721Metadata).interfaceId) {
+            IERC721Metadata token = IERC721Metadata(_tokenAddress);
+            return (token.name(), token.symbol(), token.tokenURI(_tokenId));
+        } 
+        catch {
+            return ("", "", "");
+        }
     }
 }
