@@ -2,9 +2,9 @@
  
 pragma solidity ^0.8.20;
 
-import "./ERC721MarketplaceBase.sol";
+import "./ERC721BaseMarketplace.sol";
 
-contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
+contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
     struct ItemOnSale {
         address tokenAddress;
         uint256 tokenId;
@@ -44,6 +44,18 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
     function isOnSale(ItemOnSale memory item) internal pure returns (bool) {
         return !item.isSold && !item.isCanceled;
     }
+
+    constructor(
+        address _feeRecipient,
+        uint256 _feePercentage,
+        uint256 _minFeeInUSD,
+        address _priceFeed
+    ) ERC721BaseMarketplace(
+        _feeRecipient,
+        _feePercentage,
+        _minFeeInUSD,
+        _priceFeed
+    ) {}
 
     function listItem(address _tokenAddress, uint256 _tokenId, uint256 _price) external whenNotPaused {
         require(_price > 0, "Marketplace: price must be greater than 0");
@@ -86,20 +98,15 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
         require(msg.value >= item.price, "Marketplace: not enough eth");
         require(token.ownerOf(item.tokenId) == address(this), "Marketplace: token not held by marketplace");
 
+        item.isSold = true;
+
         uint256 totalPrice = item.price;
 
-        (uint256 royaltyAmount, address royaltyRecipient) = _calculateRoyalties(
+        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount, address royaltyRecipient) = calculateDistribution(
             item.tokenAddress, 
             item.tokenId, 
             totalPrice
         );
-        
-        uint256 marketplaceFee = countFee(totalPrice, feePercentage);
-
-        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount) = 
-            _calculateDistribution(totalPrice, royaltyAmount, marketplaceFee);
-
-        item.isSold = true;
 
         if (actualRoyalty > 0 && royaltyRecipient != address(0)) {
             (bool sent, ) = payable(royaltyRecipient).call{value: actualRoyalty}("");
@@ -144,7 +151,7 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
         emit CancelSale(_itemId);
     }
 
-    function withdrawToken(uint256 _itemId) external itemExists(_itemId) {
+    function withdrawToken(uint256 _itemId) external override itemExists(_itemId) {
         ItemOnSale storage item = listOfItemsOnSale[_itemId];
         IERC721 token = IERC721(item.tokenAddress);
 

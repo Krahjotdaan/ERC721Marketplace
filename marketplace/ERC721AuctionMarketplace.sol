@@ -2,9 +2,9 @@
  
 pragma solidity ^0.8.20;
 
-import "./ERC721MarketplaceBase.sol";
+import "./ERC721BaseMarketplace.sol";
 
-contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
+contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
     struct Auction {
         address tokenAddress;
         uint256 tokenId;
@@ -14,7 +14,6 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
         uint256 startPrice;
         uint256 currentBid;
         address currentBidder;
-        uint256 auctionFeePercentage;
         bool isCanceled;
         bool isCompleted;
     }
@@ -27,8 +26,7 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
         uint256 indexed itemId, 
         address indexed tokenAddress, 
         uint256 indexed tokenId, 
-        uint256 startPrice,
-        uint256 auctionFeePercentage
+        uint256 startPrice
     );
     event MakeBid(uint256 indexed auctionId, address indexed bidder, uint256 indexed newBid);
     event CancelAuction(uint256 indexed auctionId);
@@ -50,6 +48,18 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
     function isOnAuction(Auction memory auction) internal pure returns (bool) {
         return !auction.isCanceled && !auction.isCompleted;
     }
+
+    constructor(
+        address _feeRecipient,
+        uint256 _feePercentage,
+        uint256 _minFeeInUSD,
+        address _priceFeed
+    ) ERC721BaseMarketplace(
+        _feeRecipient,
+        _feePercentage,
+        _minFeeInUSD,
+        _priceFeed
+    ) {}
 
     function withdraw() external override onlyOwner {
         uint256 amount = address(this).balance - frozenEth;
@@ -79,12 +89,11 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
             startPrice: _startPrice,
             currentBid: 0,
             currentBidder: address(0),
-            auctionFeePercentage: feePercentage,
             isCanceled: false,
             isCompleted: false
         });
 
-        emit CreateAuction(lastAuctionId, _tokenAddress, _tokenId, _startPrice, feePercentage);
+        emit CreateAuction(lastAuctionId, _tokenAddress, _tokenId, _startPrice);
     }
 
     function makeBid(uint256 _auctionId) external payable nonReentrant whenNotPaused auctionExists(_auctionId) {
@@ -128,7 +137,7 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
         emit CancelAuction(_auctionId);
     }
 
-    function withdrawToken(uint256 _auctionId) external auctionExists(_auctionId) {
+    function withdrawToken(uint256 _auctionId) external override auctionExists(_auctionId) {
         Auction storage auction = listOfAuctions[_auctionId];
         IERC721 token = IERC721(auction.tokenAddress);
 
@@ -161,16 +170,11 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
 
         uint256 totalPrice = auction.currentBid;
 
-        (uint256 royaltyAmount, address royaltyRecipient) = _calculateRoyalties(
+        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount, address royaltyRecipient) = calculateDistribution(
             auction.tokenAddress, 
             auction.tokenId, 
             totalPrice
         );
-        
-        uint256 marketplaceFee = countFee(totalPrice, feePercentage);
-
-        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount) = 
-            _calculateDistribution(totalPrice, royaltyAmount, marketplaceFee);
 
         if (actualRoyalty > 0 && royaltyRecipient != address(0)) {
             (bool sent, ) = payable(royaltyRecipient).call{value: actualRoyalty}("");

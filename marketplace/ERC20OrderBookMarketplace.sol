@@ -5,8 +5,9 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "calculators/ERC20MarketplaceFeeCalculator.sol";
 
-contract ERC20OrderBookMarketplace is ReentrancyGuard {
+contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalculator {
     using SafeERC20 for IERC20;
 
     struct Order {
@@ -15,16 +16,12 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         uint256 price;
         uint256 tokensOnSale;
         uint256 cancelledTokens;
-        uint256 orderFeePercentage;
         bool isSold;
         bool isCancelled;
     }
 
     address public owner;
     uint256 public lastOrderId;
-    uint256 public feePercentage = 250; // base 10000 (e.x. 250 = 2,5%)
-    address public feeRecipient;
-    uint256 minFee = 0.00003 ether;
     bool public paused;
     mapping(uint256 => Order) public listOfOrders;
 
@@ -33,8 +30,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         address indexed seller, 
         address indexed tokenAddress, 
         uint256 price, 
-        uint256 amount,
-        uint256 orderFeePercentage
+        uint256 amount
     );
     event ChangePrice(uint256 indexed orderId, uint256 indexed oldPrice, uint256 indexed newPrice);
     event Purchase(
@@ -47,12 +43,9 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         bool isSold
     );
     event Cancel(uint256 indexed orderId, uint256 indexed amount, bool indexed isCancelled);
+    event Withdraw(uint256 indexed amount);
     event WithdrawTokens(uint256 indexed orderId, address indexed seller, uint256 indexed amount);
     event Paused(bool indexed paused);
-    event Withdraw(uint256 indexed amount);
-    event SetFeePercentage(uint256 indexed oldFeePercentage, uint256 indexed newFeePercentage);
-    event SetFeeRecepient(address indexed oldFeeRecepient, address indexed newFeeRecepient);
-    event SetMinFee(uint256 indexed oldMinFee, uint256 indexed newMinFee);
 
     modifier validPrice(uint256 _price) {
         require(_price > 0, "Marketplace: price must be over 0");
@@ -83,9 +76,18 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         return !order.isSold && !order.isCancelled;
     }
 
-    constructor() {
+    constructor(
+        address _feeRecipient,
+        uint256 _feePercentage,
+        uint256 _minFeeInUSD,
+        address _priceFeed
+    ) ERC20MarketplaceFeeCalculator(
+        _feeRecipient,
+        _feePercentage,
+        _minFeeInUSD,
+        _priceFeed
+    ) {
         owner = msg.sender;
-        feeRecipient = owner;
     }
 
     receive() external payable {}
@@ -119,7 +121,6 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             price: _price,
             tokensOnSale: _amount,
             cancelledTokens: 0,
-            orderFeePercentage: feePercentage,
             isSold: false,
             isCancelled: false
         });
@@ -129,8 +130,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             seller: msg.sender,
             tokenAddress: _tokenAddress,
             price: _price,
-            amount: _amount,
-            orderFeePercentage: feePercentage
+            amount: _amount
         });
     }
 
@@ -166,15 +166,19 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             order.isSold = true;
         }
 
-        uint256 _fee = countFee(requiredEth, order.orderFeePercentage);
+        uint256 fee = calculateFee(requiredEth);
 
-        (bool sent, ) = payable(order.seller).call{value: requiredEth - _fee}("");
-        require(sent, "Marketplace: failed to send ETH");
-
-        token.safeTransfer(msg.sender, _amount);
-
-        (bool feeSent, ) = payable(feeRecipient).call{value: _fee}("");
+        (bool feeSent, ) = payable(feeRecipient).call{value: fee}("");
         require(feeSent, "Marketplace: failed to send fee");
+
+        uint256 sellerAmount = requiredEth - fee;
+
+        if (sellerAmount > 0) {
+            (bool sent, ) = payable(order.seller).call{value: sellerAmount}("");
+            require(sent, "Marketplace: failed to send ETH");
+        }
+        
+        token.safeTransfer(msg.sender, _amount);
 
         if (msg.value > requiredEth) {
             (bool refunded, ) = payable(msg.sender).call{value: msg.value - requiredEth}("");
@@ -187,7 +191,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
             customer: msg.sender,
             price: order.price,
             amount: _amount,
-            fee: _fee,
+            fee: fee,
             isSold: order.isSold
         });
     }
@@ -227,46 +231,5 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
     function setPaused(bool _paused) external onlyOwner {
         paused = _paused;
         emit Paused(paused);
-    }
-
-    function setFeePercentage(uint256 _feePercentage) external onlyOwner {
-        require(_feePercentage <= 1000, "Marketplace: fee percentage too high (max 10%)");
-        require(_feePercentage != feePercentage, "Marketplace: same fee percentage");
-
-        uint256 oldFeePercentage = feePercentage;
-        feePercentage = _feePercentage;
-
-        emit SetFeePercentage(oldFeePercentage, feePercentage);
-    }
-
-    function setFeeRecepient(address _feeRecepient) external onlyOwner {
-        require(_feeRecepient != address(0), "Marketplace: zero address");
-        require(_feeRecepient != feeRecipient, "Marketplace: same recipient");
-        
-        address oldFeeRecepient = feeRecipient;
-        feeRecipient = _feeRecepient;
-
-        emit SetFeeRecepient(oldFeeRecepient, feeRecipient);
-    }
-
-    function setMinFee(uint256 _newMinFee) external onlyOwner {
-        require(_newMinFee >= 0.000003 ether, "Marketplace: new min fee too low");
-
-        uint256 oldMinFee = minFee;
-        minFee = _newMinFee;
-
-        emit SetMinFee(oldMinFee, _newMinFee);
-    }
-
-    function countFee(uint256 _totalPrice, uint256 _orderFee) internal view returns(uint256) {
-        uint256 fee = _totalPrice * _orderFee / 10000;
-        if (fee < minFee) {
-            fee = minFee;
-        }
-        if (fee > _totalPrice) {
-            fee = _totalPrice;
-        }
-        
-        return fee;
     }
 }
