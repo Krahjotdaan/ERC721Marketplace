@@ -5,6 +5,14 @@ pragma solidity ^0.8.20;
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 abstract contract BaseFeeCalculator {
+    address private constant ETH_USD_MAINNET = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+    address private constant ETH_USD_SEPOLIA = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
+    address private constant ETH_USD_HOLESKY = 0x1B392212b2E7fe038E8Daf2d389f2A3921A77ADA;
+    address private constant ETH_USD_GOERLI = 0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e;
+    address private constant ETH_USD_POLYGON = 0xAB594600376Ec9fD91F8e885dADF0CE036862dE0;
+    address private constant ETH_USD_ARBITRUM = 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612;
+    address private constant ETH_USD_OPTIMISM = 0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e;
+
     address public feeRecipient;
     uint256 public feePercentage; 
     uint256 public minFeeInUSD; 
@@ -14,17 +22,40 @@ abstract contract BaseFeeCalculator {
     event FeePercentageChanged(uint256 indexed oldPercentage, uint256 indexed newPercentage);
     event MinFeeInUSDChanged(uint256 indexed oldMinFee, uint256 indexed newMinFee);
     event FeeRecipientChanged(address indexed oldRecipient, address indexed newRecipient);
+    event NetworkDetected(uint256 indexed chainId, address indexed priceFeed);
 
     modifier calcOnlyOwner() {
         require(msg.sender == feeRecipient, "Calculator: not owner");
         _;
     }
 
+    function getChainId() internal view returns(uint256) {
+        uint256 chainId;
+        assembly {
+            chainId := chainid()
+        }
+
+        return chainId;
+    }
+
+    function getNetworkPriceFeed() public view returns (address) {
+        uint256 chainId = getChainId();
+        
+        if (chainId == 1) return ETH_USD_MAINNET; 
+        if (chainId == 11155111) return ETH_USD_SEPOLIA; 
+        if (chainId == 17000) return ETH_USD_HOLESKY;
+        if (chainId == 5) return ETH_USD_GOERLI;
+        if (chainId == 137) return ETH_USD_POLYGON;
+        if (chainId == 42161) return ETH_USD_ARBITRUM;
+        if (chainId == 10) return ETH_USD_OPTIMISM;
+        
+        revert("Calculator: unsupported network");
+    }
+
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _priceFeed
+        uint256 _minFeeInUSD
     ) {
         require(_feeRecipient != address(0), "Calculator: zero address");
         require(_feePercentage <= maxFeePercentage, "Calculator: invalid percentage");
@@ -33,7 +64,9 @@ abstract contract BaseFeeCalculator {
         feeRecipient = _feeRecipient;
         feePercentage = _feePercentage;
         minFeeInUSD = _minFeeInUSD;
-        priceFeed = AggregatorV3Interface(_priceFeed);
+        priceFeed = AggregatorV3Interface(getNetworkPriceFeed());
+
+        emit NetworkDetected(getChainId(), address(priceFeed));
     }
 
     function getMinFeeInETH() public view returns (uint256) {
@@ -79,5 +112,20 @@ abstract contract BaseFeeCalculator {
         feeRecipient = _feeRecipient;
 
         emit FeeRecipientChanged(oldRecipient, _feeRecipient);
+    }
+
+    function getFeeInfo() external view returns (uint256, uint256, uint256, uint256, address) {
+        (, int256 price, , , ) = priceFeed.latestRoundData();
+        uint8 decimals = priceFeed.decimals();
+        uint256 priceInWei = uint256(price) * 10 ** (18 - uint256(decimals));
+        uint256 currentMinFeeInETH = (minFeeInUSD * 10 ** 18) / priceInWei;
+        
+        return (
+            uint256(price) / (10 ** (uint256(decimals) - 6)), // current price of ETH in USD (6 decimals)
+            minFeeInUSD,
+            currentMinFeeInETH,
+            feePercentage,
+            address(priceFeed)
+        );
     }
 }

@@ -15,13 +15,11 @@ abstract contract ERC721MarketplaceFeeCalculator is BaseFeeCalculator {
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _priceFeed
+        uint256 _minFeeInUSD
     ) BaseFeeCalculator(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD,
-        _priceFeed
+        _minFeeInUSD
     ) {}
 
     function calculateRoyalties(

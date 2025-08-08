@@ -79,13 +79,11 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _priceFeed
+        uint256 _minFeeInUSD
     ) ERC20MarketplaceFeeCalculator(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD,
-        _priceFeed
+        _minFeeInUSD
     ) {
         owner = msg.sender;
     }

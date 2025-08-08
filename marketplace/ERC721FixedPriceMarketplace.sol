@@ -48,13 +48,11 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _priceFeed
+        uint256 _minFeeInUSD
     ) ERC721BaseMarketplace(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD,
-        _priceFeed
+        _minFeeInUSD
     ) {}
 
     function listItem(address _tokenAddress, uint256 _tokenId, uint256 _price) external whenNotPaused {
