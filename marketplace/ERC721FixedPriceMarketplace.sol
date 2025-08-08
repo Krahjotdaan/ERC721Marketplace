@@ -26,8 +26,15 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
         address seller,
         uint256 itemOnSaleFeePercentage
     );
-    event BuyItem(uint256 indexed _itemOnSaleId, address indexed _customer, uint256 fee);
-    event CancelSale(uint256 indexed _itemOnSaleId);
+    event BuyItem(
+        uint256 indexed itemOnSaleId, 
+        address indexed customer, 
+        uint256 indexed price,
+        uint256 fee, 
+        uint256 royaltyAmount, 
+        address royaltyRecipient
+    );
+    event CancelSale(uint256 indexed itemOnSaleId);
 
     modifier itemExists(uint256 _itemId) {
         require(_itemId > 0 && _itemId <= lastItemOnSaleId, "Marketplace: item does not exist");
@@ -69,32 +76,63 @@ contract ERC721FixedPriceMarketplace is ERC721MarketplaceBase {
         });
     }
 
-    function buyItem(uint256 _itemId) external payable nonReentrant whenNotPaused itemExists(_itemId) {
+    function buyItem(uint256 _itemId) external payable nonReentrant whenNotPaused {
+        require(_itemId <= lastItemOnSaleId, "Marketplace: nonexisted item");
+
         ItemOnSale storage item = listOfItemsOnSale[_itemId];
         IERC721 token = IERC721(item.tokenAddress);
 
-        require(isOnSale(item), "Marketplace: item not on sale");
-        require(msg.value >= item.price, "Marketplace: not enough ETH");
-        require(token.ownerOf(item.tokenId) == address(this), "Marketplace: token not held");
+        require(isOnSale(item), "Marketplace: this token not on sale");
+        require(msg.value >= item.price, "Marketplace: not enough eth");
+        require(token.ownerOf(item.tokenId) == address(this), "Marketplace: token not held by marketplace");
+
+        uint256 totalPrice = item.price;
+
+        (uint256 royaltyAmount, address royaltyRecipient) = _calculateRoyalties(
+            item.tokenAddress, 
+            item.tokenId, 
+            totalPrice
+        );
+        
+        uint256 marketplaceFee = countFee(totalPrice, feePercentage);
+
+        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount) = 
+            _calculateDistribution(totalPrice, royaltyAmount, marketplaceFee);
 
         item.isSold = true;
 
-        uint256 _fee = countFee(item.price, item.itemOnSaleFeePercentage);
+        if (actualRoyalty > 0 && royaltyRecipient != address(0)) {
+            (bool sent, ) = payable(royaltyRecipient).call{value: actualRoyalty}("");
+            if (!sent) {
+                emit RoyaltyPaymentFailed(royaltyRecipient, actualRoyalty);
+            }
+        }
 
-        (bool sent, ) = payable(item.seller).call{value: item.price - _fee}("");
-        require(sent, "Marketplace: failed to send ETH");
+        if (actualMarketplaceFee > 0) {
+            (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
+            require(feeSent, "Marketplace: failed to send fee");
+        }
+
+        if (sellerAmount > 0) {
+            (bool sent, ) = payable(item.seller).call{value: sellerAmount}("");
+            require(sent, "Marketplace: failed to send ETH to seller");
+        }
 
         token.safeTransferFrom(address(this), msg.sender, item.tokenId);
 
-        (bool feeSent, ) = payable(feeRecipient).call{value: _fee}("");
-        require(feeSent, "Marketplace: failed to send fee");
-
-        if (msg.value > item.price) {
-            (bool refunded, ) = payable(msg.sender).call{value: msg.value - item.price}("");
-            require(refunded, "Marketplace: failed to refund");
+        if (msg.value > totalPrice) {
+            (bool isRefunded, ) = payable(msg.sender).call{value: msg.value - totalPrice}("");
+            require(isRefunded, "Marketplace: failed to refund excess ETH");
         }
 
-        emit BuyItem(_itemId, msg.sender, _fee);
+        emit BuyItem({
+            itemOnSaleId: _itemId,
+            customer: msg.sender,
+            price: totalPrice,
+            fee: actualMarketplaceFee,
+            royaltyAmount: actualRoyalty,
+            royaltyRecipient: royaltyRecipient
+        });
     }
 
     function cancel(uint256 _itemId) external whenNotPaused itemExists(_itemId) {

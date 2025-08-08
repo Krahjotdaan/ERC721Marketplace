@@ -22,8 +22,9 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
 
     address public owner;
     uint256 public lastOrderId;
-    uint256 public feePercentage; // base 10000 (e.x. 250 = 2,5%)
+    uint256 public feePercentage = 250; // base 10000 (e.x. 250 = 2,5%)
     address public feeRecipient;
+    uint256 minFee = 0.00003 ether;
     bool public paused;
     mapping(uint256 => Order) public listOfOrders;
 
@@ -51,6 +52,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
     event Withdraw(uint256 indexed amount);
     event SetFeePercentage(uint256 indexed oldFeePercentage, uint256 indexed newFeePercentage);
     event SetFeeRecepient(address indexed oldFeeRecepient, address indexed newFeeRecepient);
+    event SetMinFee(uint256 indexed oldMinFee, uint256 indexed newMinFee);
 
     modifier validPrice(uint256 _price) {
         require(_price > 0, "Marketplace: price must be over 0");
@@ -83,7 +85,6 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
 
     constructor() {
         owner = msg.sender;
-        feePercentage = 250;
         feeRecipient = owner;
     }
 
@@ -230,6 +231,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
 
     function setFeePercentage(uint256 _feePercentage) external onlyOwner {
         require(_feePercentage <= 1000, "Marketplace: fee percentage too high (max 10%)");
+        require(_feePercentage != feePercentage, "Marketplace: same fee percentage");
+
         uint256 oldFeePercentage = feePercentage;
         feePercentage = _feePercentage;
 
@@ -246,8 +249,16 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         emit SetFeeRecepient(oldFeeRecepient, feeRecipient);
     }
 
-    function countFee(uint256 _totalPrice, uint256 _orderFee) internal pure returns(uint256) {
-        uint256 minFee = 0.000001 ether;
+    function setMinFee(uint256 _newMinFee) external onlyOwner {
+        require(_newMinFee >= 0.000003 ether, "Marketplace: new min fee too low");
+
+        uint256 oldMinFee = minFee;
+        minFee = _newMinFee;
+
+        emit SetMinFee(oldMinFee, _newMinFee);
+    }
+
+    function countFee(uint256 _totalPrice, uint256 _orderFee) internal view returns(uint256) {
         uint256 fee = _totalPrice * _orderFee / 10000;
         if (fee < minFee) {
             fee = minFee;

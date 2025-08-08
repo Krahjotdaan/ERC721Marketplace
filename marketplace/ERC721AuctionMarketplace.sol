@@ -32,7 +32,15 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
     );
     event MakeBid(uint256 indexed auctionId, address indexed bidder, uint256 indexed newBid);
     event CancelAuction(uint256 indexed auctionId);
-    event CompleteAuction(uint256 indexed auctionId, address indexed customer, uint256 indexed price, uint256 fee);
+    event CompleteAuction(
+        uint256 indexed auctionId, 
+        address indexed customer, 
+        uint256 indexed price, 
+        uint256 fee, 
+        uint256 royaltyAmount,
+        address royaltyRecipient
+    );
+    event AuctionExpired(uint256 indexed auctionId);
 
     modifier auctionExists(uint256 _auctionId) {
         require(_auctionId > 0 && _auctionId <= lastAuctionId, "Marketplace: auction does not exist");
@@ -137,31 +145,59 @@ contract ERC721AuctionMarketplace is ERC721MarketplaceBase {
         Auction storage auction = listOfAuctions[_auctionId];
         IERC721 token = IERC721(auction.tokenAddress);
 
-        require(auction.endTime <= block.timestamp, "Marketplace: not over");
-        require(isOnAuction(auction), "Marketplace: not active");
-        require(token.ownerOf(auction.tokenId) == address(this), "Marketplace: token not held");
+        require(auction.endTime <= block.timestamp, "Marketplace: auction is not over");
+        require(isOnAuction(auction), "Marketplace: this auction is not being held");
+        require(token.ownerOf(auction.tokenId) == address(this), "Marketplace: token not held by marketplace");
 
         auction.isCompleted = true;
 
-        uint256 _fee;
-
         if (auction.currentBidder == address(0)) {
             token.transferFrom(address(this), auction.seller, auction.tokenId);
-            _fee = 0;
-        } 
-        else {
-            _fee = countFee(auction.currentBid, auction.auctionFeePercentage);
 
-            (bool sent, ) = payable(auction.seller).call{value: auction.currentBid - _fee}("");
-            require(sent, "Marketplace: failed to send ETH");
-            frozenEth -= auction.currentBid;
-            
-            token.safeTransferFrom(address(this), auction.currentBidder, auction.tokenId);
+            emit AuctionExpired(_auctionId);
 
-            (bool feeSent, ) = payable(feeRecipient).call{value: _fee}("");
+            return;
+        }
+
+        uint256 totalPrice = auction.currentBid;
+
+        (uint256 royaltyAmount, address royaltyRecipient) = _calculateRoyalties(
+            auction.tokenAddress, 
+            auction.tokenId, 
+            totalPrice
+        );
+        
+        uint256 marketplaceFee = countFee(totalPrice, feePercentage);
+
+        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount) = 
+            _calculateDistribution(totalPrice, royaltyAmount, marketplaceFee);
+
+        if (actualRoyalty > 0 && royaltyRecipient != address(0)) {
+            (bool sent, ) = payable(royaltyRecipient).call{value: actualRoyalty}("");
+            if (!sent) {
+                emit RoyaltyPaymentFailed(royaltyRecipient, actualRoyalty);
+            }
+        }
+
+        if (actualMarketplaceFee > 0) {
+            (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
             require(feeSent, "Marketplace: failed to send fee");
         }
 
-        emit CompleteAuction(_auctionId, auction.currentBidder, auction.currentBid, _fee);
+        if (sellerAmount > 0) {
+            (bool sent, ) = payable(auction.seller).call{value: sellerAmount}("");
+            require(sent, "Marketplace: failed to send ETH to seller");
+        }
+
+        token.safeTransferFrom(address(this), auction.currentBidder, auction.tokenId);
+
+        emit CompleteAuction({
+            auctionId: _auctionId,
+            customer: auction.currentBidder,
+            price: totalPrice,
+            fee: actualMarketplaceFee,
+            royaltyAmount: actualRoyalty,
+            royaltyRecipient: royaltyRecipient
+        });
     }
 }
