@@ -30,11 +30,13 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard, ERC
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD
+        uint256 _minFeeInUSD,
+        address _userStorage
     ) ERC721MarketplaceFeeCalculator(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD
+        _minFeeInUSD,
+        _userStorage
     ) {
         owner = msg.sender;
     }

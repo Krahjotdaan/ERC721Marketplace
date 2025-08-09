@@ -8,10 +8,12 @@ abstract contract ERC20MarketplaceFeeCalculator is BaseFeeCalculator {
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD
+        uint256 _minFeeInUSD,
+        address _userStorage
     ) BaseFeeCalculator(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD
+        _minFeeInUSD,
+        _userStorage
     ) {}
 }

@@ -52,11 +52,13 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD
+        uint256 _minFeeInUSD,
+        address _userStorage
     ) ERC721BaseMarketplace(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD
+        _minFeeInUSD,
+        _userStorage
     ) {}
 
     function withdraw() external override onlyOwner {
@@ -71,8 +73,10 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
         require(_startPrice > 0, "Marketplace: price must be greater than 0");
         require(_tokenAddress != address(0), "Marketplace: zero address");
         require(isERC721(_tokenAddress), "Marketplace: not ERC721");
+        require(!userStorage.getUserInfo(msg.sender).isBlacklistedSeller, "Marketplace: msg.sender is in blacklist of sellers");
 
         IERC721 token = IERC721(_tokenAddress);
+
         require(isPermitted(token, _tokenId), "Marketplace: not owner or approved");
 
         token.safeTransferFrom(msg.sender, address(this), _tokenId);
@@ -91,12 +95,15 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
             isCompleted: false
         });
 
+        userStorage.recordAuctionCreation(msg.sender, lastAuctionId);
+
         emit CreateAuction(lastAuctionId, _tokenAddress, _tokenId, _startPrice);
     }
 
     function makeBid(uint256 _auctionId) external payable nonReentrant whenNotPaused auctionExists(_auctionId) {
         Auction storage auction = listOfAuctions[_auctionId];
 
+        require(msg.sender != auction.seller, "Marketplace: you are seller");
         require(msg.value > auction.currentBid && msg.value >= auction.startPrice, "Marketplace: bid too low");
         require(isOnAuction(auction) && auction.endTime > block.timestamp, "Marketplace: auction not active");
 
@@ -184,6 +191,7 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
         if (actualMarketplaceFee > 0) {
             (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
             require(feeSent, "Marketplace: failed to send fee");
+            userStorage.recordFeesPaid(auction.currentBidder, actualMarketplaceFee);
         }
 
         if (sellerAmount > 0) {
@@ -192,6 +200,8 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
         }
 
         token.safeTransferFrom(address(this), auction.currentBidder, auction.tokenId);
+
+        userStorage.recordAuctionPurchase(auction.currentBidder, auction.seller, _auctionId, totalPrice);
 
         emit CompleteAuction({
             auctionId: _auctionId,

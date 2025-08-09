@@ -23,6 +23,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
     address public owner;
     uint256 public lastOrderId;
     bool public paused;
+
     mapping(uint256 => Order) public listOfOrders;
 
     event ListOrder(
@@ -79,11 +80,13 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD
+        uint256 _minFeeInUSD,
+        address _userStorage
     ) ERC20MarketplaceFeeCalculator(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD
+        _minFeeInUSD,
+        _userStorage
     ) {
         owner = msg.sender;
     }
@@ -101,6 +104,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
     function listOrder(address _tokenAddress, uint256 _price, uint256 _amount) external whenNotPaused nonReentrant validPrice(_price) validAmount(_amount) {
         require(_tokenAddress != address(0), "Marketplace: tokenAddress is address(0)");
         require(_tokenAddress.code.length > 0, "Marketplace: tokenAddress is not a contract");
+        require(!userStorage.getUserInfo(msg.sender).isBlacklistedSeller, "Marketplace: msg.sender is in blacklist of sellers");
 
         IERC20 token = IERC20(_tokenAddress);
 
@@ -122,6 +126,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
             isSold: false,
             isCancelled: false
         });
+
+        userStorage.recordOrder(msg.sender, lastOrderId);
 
         emit ListOrder({
             orderId: lastOrderId,
@@ -169,6 +175,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
         (bool feeSent, ) = payable(feeRecipient).call{value: fee}("");
         require(feeSent, "Marketplace: failed to send fee");
 
+        userStorage.recordFeesPaid(msg.sender, fee);
+
         uint256 sellerAmount = requiredEth - fee;
 
         if (sellerAmount > 0) {
@@ -177,6 +185,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
         }
         
         token.safeTransfer(msg.sender, _amount);
+
+        userStorage.recordOrderPurchase(msg.sender, order.seller, _orderId, requiredEth);
 
         if (msg.value > requiredEth) {
             (bool refunded, ) = payable(msg.sender).call{value: msg.value - requiredEth}("");

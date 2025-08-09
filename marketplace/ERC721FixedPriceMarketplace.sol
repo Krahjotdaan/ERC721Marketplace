@@ -48,19 +48,23 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD
+        uint256 _minFeeInUSD,
+        address _userStorage
     ) ERC721BaseMarketplace(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD
+        _minFeeInUSD,
+        _userStorage
     ) {}
 
     function listItem(address _tokenAddress, uint256 _tokenId, uint256 _price) external whenNotPaused {
         require(_price > 0, "Marketplace: price must be greater than 0");
         require(_tokenAddress != address(0), "Marketplace: zero address");
         require(isERC721(_tokenAddress), "Marketplace: not ERC721");
+        require(!userStorage.getUserInfo(msg.sender).isBlacklistedSeller, "Marketplace: msg.sender is in blacklist of sellers");
 
         IERC721 token = IERC721(_tokenAddress);
+
         require(isPermitted(token, _tokenId), "Marketplace: not owner or approved");
 
         token.safeTransferFrom(msg.sender, address(this), _tokenId);
@@ -75,6 +79,8 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
             isSold: false,
             isCanceled: false
         });
+
+        userStorage.recordListing(msg.sender, lastItemOnSaleId);
 
         emit ListItem({
             itemId: lastItemOnSaleId,
@@ -116,6 +122,7 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         if (actualMarketplaceFee > 0) {
             (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
             require(feeSent, "Marketplace: failed to send fee");
+            userStorage.recordFeesPaid(msg.sender, actualMarketplaceFee);
         }
 
         if (sellerAmount > 0) {
@@ -124,6 +131,8 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         }
 
         token.safeTransferFrom(address(this), msg.sender, item.tokenId);
+
+        userStorage.recordItemPurchase(msg.sender, item.seller, _itemId, totalPrice);
 
         if (msg.value > totalPrice) {
             (bool isRefunded, ) = payable(msg.sender).call{value: msg.value - totalPrice}("");

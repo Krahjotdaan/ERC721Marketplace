@@ -3,6 +3,7 @@
 pragma solidity ^0.8.20;
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "storage/UserStorage.sol";
 
 abstract contract BaseFeeCalculator {
     address private constant ETH_USD_MAINNET = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
@@ -17,6 +18,7 @@ abstract contract BaseFeeCalculator {
     uint256 public feePercentage; 
     uint256 public minFeeInUSD; 
     uint256 public maxFeePercentage = 1000;
+    UserStorage public userStorage;
     AggregatorV3Interface public priceFeed;
 
     event FeePercentageChanged(uint256 indexed oldPercentage, uint256 indexed newPercentage);
@@ -55,7 +57,8 @@ abstract contract BaseFeeCalculator {
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD
+        uint256 _minFeeInUSD,
+        address _userStorage
     ) {
         require(_feeRecipient != address(0), "Calculator: zero address");
         require(_feePercentage <= maxFeePercentage, "Calculator: invalid percentage");
@@ -65,6 +68,7 @@ abstract contract BaseFeeCalculator {
         feePercentage = _feePercentage;
         minFeeInUSD = _minFeeInUSD;
         priceFeed = AggregatorV3Interface(getNetworkPriceFeed());
+        userStorage = UserStorage(_userStorage);
 
         emit NetworkDetected(getChainId(), address(priceFeed));
     }

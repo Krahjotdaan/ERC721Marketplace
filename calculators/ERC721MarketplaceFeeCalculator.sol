@@ -7,19 +7,19 @@ import "./BaseFeeCalculator.sol";
 
 abstract contract ERC721MarketplaceFeeCalculator is BaseFeeCalculator {
     uint256 public maxRoyaltyPercentage = 5000; 
-    mapping(address => bool) public royaltyBlacklist;
 
     event MaxRoyaltyPercentageChanged(uint256 indexed oldPercentage, uint256 indexed newPercentage);
-    event RoyaltyBlacklisted(address indexed recipient);
 
     constructor(
         address _feeRecipient,
         uint256 _feePercentage,
-        uint256 _minFeeInUSD
+        uint256 _minFeeInUSD,
+        address _userStorage
     ) BaseFeeCalculator(
         _feeRecipient,
         _feePercentage,
-        _minFeeInUSD
+        _minFeeInUSD,
+        _userStorage
     ) {}
 
     function calculateRoyalties(
@@ -36,7 +36,7 @@ abstract contract ERC721MarketplaceFeeCalculator is BaseFeeCalculator {
         }
         
         try IERC2981(tokenAddress).royaltyInfo(tokenId, totalPrice) returns (address recipient, uint256 amount) {
-            if (royaltyBlacklist[recipient]) {
+            if (userStorage.getUserInfo(recipient).isBlacklistedRoyalty) {
                 return (0, address(0));
             }
             
@@ -75,10 +75,5 @@ abstract contract ERC721MarketplaceFeeCalculator is BaseFeeCalculator {
         maxRoyaltyPercentage = _maxRoyaltyPercentage;
 
         emit MaxRoyaltyPercentageChanged(oldPercentage, _maxRoyaltyPercentage);
-    }
-
-    function addToRoyaltyBlacklist(address recipient) external calcOnlyOwner {
-        royaltyBlacklist[recipient] = true;
-        emit RoyaltyBlacklisted(recipient);
     }
 }
