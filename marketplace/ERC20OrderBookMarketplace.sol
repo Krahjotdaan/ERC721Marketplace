@@ -158,6 +158,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
         require(order.tokensOnSale >= _amount, "Marketplace: too many tokens to purchase");
 
         uint256 requiredEth = order.price * _amount;
+
         require(requiredEth / _amount == order.price, "Marketplace: multiplication overflow");
         require(msg.value >= requiredEth, "Marketplace: not enough eth"); 
 
@@ -228,9 +229,11 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
         require(msg.sender == order.seller, "Marketplace: permission denied");
 
         IERC20 token = IERC20(order.tokenAddress);
+
         require(token.balanceOf(address(this)) >= _amount, "Marketplace: not enough tokens in the contract");
 
         order.cancelledTokens -= _amount;
+        
         require(token.trySafeTransfer(msg.sender, _amount), "Marketplace: token transfer failed");
 
         emit WithdrawTokens(_orderId, msg.sender, _amount);

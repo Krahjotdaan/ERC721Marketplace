@@ -122,6 +122,7 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         if (actualMarketplaceFee > 0) {
             (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
             require(feeSent, "Marketplace: failed to send fee");
+            
             userStorage.recordFeesPaid(msg.sender, actualMarketplaceFee);
         }
 
@@ -151,10 +152,12 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
 
     function cancel(uint256 _itemId) external whenNotPaused itemExists(_itemId) {
         ItemOnSale storage item = listOfItemsOnSale[_itemId];
+
         require(msg.sender == item.seller, "Marketplace: not seller");
         require(isOnSale(item), "Marketplace: item not on sale");
 
         item.isCanceled = true;
+
         emit CancelSale(_itemId);
     }
 

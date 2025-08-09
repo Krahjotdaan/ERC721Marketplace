@@ -66,6 +66,7 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard, ERC
     function withdraw() external virtual onlyOwner {
         uint256 amount = address(this).balance;
         (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        
         require(sent, "Marketplace: failed to send ETH");
         
         emit Withdraw(amount);

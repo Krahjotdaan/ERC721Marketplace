@@ -24,6 +24,7 @@ contract MarketplaceRegistry is IMarketplaceRegistry {
     function authorizeMarketplace(address marketplace) external onlyOwner {
         require(marketplace != address(0), "Registry: zero address");
         authorizedMarketplaces[marketplace] = true;
+        
         emit MarketplaceAuthorized(marketplace);
     }
     

@@ -64,6 +64,7 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
     function withdraw() external override onlyOwner {
         uint256 amount = address(this).balance - frozenEth;
         (bool sent, ) = payable(msg.sender).call{value: amount}("");
+
         require(sent, "Marketplace: failed to send ETH");
         
         emit Withdraw(amount);
@@ -127,6 +128,7 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
 
     function cancelAuction(uint256 _auctionId) external nonReentrant whenNotPaused auctionExists(_auctionId) {
         Auction storage auction = listOfAuctions[_auctionId];
+
         require(msg.sender == auction.seller, "Marketplace: not seller");
         require(isOnAuction(auction) && auction.endTime > block.timestamp, "Marketplace: not active");
 
@@ -191,6 +193,7 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
         if (actualMarketplaceFee > 0) {
             (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
             require(feeSent, "Marketplace: failed to send fee");
+            
             userStorage.recordFeesPaid(auction.currentBidder, actualMarketplaceFee);
         }
 

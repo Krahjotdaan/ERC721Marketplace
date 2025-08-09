@@ -63,6 +63,7 @@ contract UserStorage {
             
             userCount++;
             userIds[userCount] = user;
+
             emit UserCreated(user);
         }
     }
@@ -110,7 +111,6 @@ contract UserStorage {
     
     function recordAuctionPurchase(address buyer, address seller, uint256 auctionId, uint256 price) external onlyAuthorizedMarketplace {
         _createUserIfNotExists(buyer);
-        _createUserIfNotExists(seller);
         
         users[buyer].auctionsPurchasesCount++;
         users[buyer].totalPurchases += price;
@@ -145,9 +145,11 @@ contract UserStorage {
     
     function getAllUsers() external view returns (address[] memory) {
         address[] memory allUsers = new address[](userCount);
+        
         for (uint256 i = 0; i < userCount; i++) {
             allUsers[i] = userIds[i + 1];
         }
+
         return allUsers;
     }
     
