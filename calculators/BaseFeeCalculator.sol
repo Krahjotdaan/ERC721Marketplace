@@ -9,7 +9,6 @@ abstract contract BaseFeeCalculator {
     address private constant ETH_USD_MAINNET = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private constant ETH_USD_SEPOLIA = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
     address private constant ETH_USD_HOLESKY = 0x1B392212b2E7fe038E8Daf2d389f2A3921A77ADA;
-    address private constant ETH_USD_GOERLI = 0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e;
     address private constant ETH_USD_POLYGON = 0xAB594600376Ec9fD91F8e885dADF0CE036862dE0;
     address private constant ETH_USD_ARBITRUM = 0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612;
     address private constant ETH_USD_OPTIMISM = 0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e;
@@ -46,7 +45,6 @@ abstract contract BaseFeeCalculator {
         if (chainId == 1) return ETH_USD_MAINNET; 
         if (chainId == 11155111) return ETH_USD_SEPOLIA; 
         if (chainId == 17000) return ETH_USD_HOLESKY;
-        if (chainId == 5) return ETH_USD_GOERLI;
         if (chainId == 137) return ETH_USD_POLYGON;
         if (chainId == 42161) return ETH_USD_ARBITRUM;
         if (chainId == 10) return ETH_USD_OPTIMISM;
