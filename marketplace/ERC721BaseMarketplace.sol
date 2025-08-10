@@ -6,10 +6,12 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "calculators/CalculatorService.sol";
 import "storage/UserStorage.sol";
 
-abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard {
+abstract contract ERC721BaseMarketplace is Initializable, UUPSUpgradeable, IERC721Receiver, ReentrancyGuard {
     address public owner;
     bool public paused;
     UserStorage public userStorage;
@@ -30,7 +32,9 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard {
         _;
     }
 
-    constructor(address _userStorage, address _calculatorServise) {
+    constructor() {}
+
+    function initialize(address _userStorage, address _calculatorServise) public virtual initializer {
         owner = msg.sender;
         userStorage = UserStorage(_userStorage);
         calculator = CalculatorService(_calculatorServise);
@@ -114,4 +118,6 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard {
             return ("", "", "");
         }
     }
+
+    function _authorizeUpgrade(address) internal virtual override onlyOwner {}
 }

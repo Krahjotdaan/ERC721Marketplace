@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 
 import "./ERC721BaseMarketplace.sol";
 
-contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
+contract ERC721FixedPriceMarketplace is Initializable, UUPSUpgradeable, ERC721BaseMarketplace {
     struct ItemOnSale {
         address tokenAddress;
         uint256 tokenId;
@@ -43,8 +43,9 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         return !item.isSold && !item.isCanceled;
     }
 
-    constructor(address _userStorage, address _calculatorServise) 
-    ERC721BaseMarketplace(_userStorage, _calculatorServise) {}
+    function initialize(address _userStorage, address _calculatorServise) public override(ERC721BaseMarketplace) initializer {
+        ERC721BaseMarketplace.initialize(_userStorage, _calculatorServise);
+    }
 
     function listItem(address _tokenAddress, uint256 _tokenId, uint256 _price) external whenNotPaused {
         require(_price > 0, "Marketplace: price must be greater than 0");
@@ -163,5 +164,9 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         token.transferFrom(address(this), msg.sender, item.tokenId);
 
         emit WithdrawToken(item.tokenAddress, item.tokenId, msg.sender);
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override(ERC721BaseMarketplace, UUPSUpgradeable) {
+        super._authorizeUpgrade(newImplementation);
     }
 }

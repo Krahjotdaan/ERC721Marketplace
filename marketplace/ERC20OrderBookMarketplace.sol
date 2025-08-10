@@ -5,10 +5,12 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "calculators/CalculatorService.sol";
 import "storage/UserStorage.sol";
 
-contract ERC20OrderBookMarketplace is ReentrancyGuard {
+contract ERC20OrderBookMarketplace is Initializable, UUPSUpgradeable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct Order {
@@ -80,7 +82,9 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         return !order.isSold && !order.isCancelled;
     }
 
-    constructor(address _userStorage, address _calculatorServise) {
+    constructor() {}
+
+    function initialize(address _userStorage, address _calculatorServise) public initializer {
         owner = msg.sender;
         userStorage = UserStorage(_userStorage);
         calculator = CalculatorService(_calculatorServise);
@@ -238,4 +242,6 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard {
         paused = _paused;
         emit Paused(paused);
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 }

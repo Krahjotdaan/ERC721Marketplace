@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 
 import "./ERC721BaseMarketplace.sol";
 
-contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
+contract ERC721AuctionMarketplace is Initializable, UUPSUpgradeable, ERC721BaseMarketplace {
     struct Auction {
         address tokenAddress;
         uint256 tokenId;
@@ -49,8 +49,9 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
         return !auction.isCanceled && !auction.isCompleted;
     }
 
-    constructor(address _userStorage, address _calculatorServise) 
-    ERC721BaseMarketplace(_userStorage, _calculatorServise) {}
+    function initialize(address _userStorage, address _calculatorServise) public override(ERC721BaseMarketplace) initializer {
+        ERC721BaseMarketplace.initialize(_userStorage, _calculatorServise);
+    }
 
     function withdraw() external override onlyOwner {
         uint256 amount = address(this).balance - frozenEth;
@@ -209,5 +210,9 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
             royaltyAmount: actualRoyalty,
             royaltyRecipient: royaltyRecipient
         });
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override(ERC721BaseMarketplace, UUPSUpgradeable) {
+        super._authorizeUpgrade(newImplementation);
     }
 }

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/interfaces/IERC2981.sol";
+import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "storage/UserStorage.sol";
 
-contract CalculatorService {
+contract CalculatorService is Initializable, UUPSUpgradeable {
     address private constant ETH_USD_MAINNET = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private constant ETH_USD_SEPOLIA = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
     address private constant ETH_USD_HOLESKY = 0x1B392212b2E7fe038E8Daf2d389f2A3921A77ADA;
@@ -61,12 +62,12 @@ contract CalculatorService {
         revert("Calculator: unsupported network");
     }
 
-    constructor(
+    function initialize(
         address _feeRecipient,
         uint256 _feePercentage,
         uint256 _minFeeInUSD,
         address _userStorage
-    ) {
+    ) public initializer {
         require(_feeRecipient != address(0), "Calculator: zero address");
         require(_feePercentage <= maxFeePercentage, "Calculator: invalid percentage");
         require(_minFeeInUSD > 0, "Calculator: min fee must be > 0");
@@ -154,7 +155,7 @@ contract CalculatorService {
     }
 
     function setMaxStaleThreshold(uint256 _maxStaleThreshold) external calcOnlyOwner {
-        require(_maxStaleThreshold > _maxStaleThreshold, "Calculator: max stale threshold must be > stale threshold");
+        require(_maxStaleThreshold > staleThreshold, "Calculator: max stale threshold must be > stale threshold");
         require(_maxStaleThreshold != maxStaleThreshold, "Calculator: same max stale threshold");
 
         uint256 oldMaxStaleThreshold = maxStaleThreshold;
@@ -262,5 +263,9 @@ contract CalculatorService {
         maxRoyaltyPercentage = _maxRoyaltyPercentage;
 
         emit MaxRoyaltyPercentageChanged(oldPercentage, _maxRoyaltyPercentage);
+    }
+
+    function _authorizeUpgrade(address) internal view override {
+        require(msg.sender == feeRecipient, "CalculatorService: not owner");
     }
 }
