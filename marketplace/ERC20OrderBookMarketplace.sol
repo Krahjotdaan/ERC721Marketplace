@@ -5,9 +5,10 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "calculators/ERC20MarketplaceFeeCalculator.sol";
+import "calculators/CalculatorService.sol";
+import "storage/UserStorage.sol";
 
-contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalculator {
+contract ERC20OrderBookMarketplace is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct Order {
@@ -23,6 +24,8 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
     address public owner;
     uint256 public lastOrderId;
     bool public paused;
+    UserStorage public userStorage;
+    CalculatorService public calculator;
 
     mapping(uint256 => Order) public listOfOrders;
 
@@ -77,18 +80,10 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
         return !order.isSold && !order.isCancelled;
     }
 
-    constructor(
-        address _feeRecipient,
-        uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _userStorage
-    ) ERC20MarketplaceFeeCalculator(
-        _feeRecipient,
-        _feePercentage,
-        _minFeeInUSD,
-        _userStorage
-    ) {
+    constructor(address _userStorage, address _calculatorServise) {
         owner = msg.sender;
+        userStorage = UserStorage(_userStorage);
+        calculator = CalculatorService(_calculatorServise);
     }
 
     receive() external payable {}
@@ -110,7 +105,7 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
 
         require(token.balanceOf(msg.sender) >= _amount, "Marketplace: not enough balance");
         require(
-            token.allowance(msg.sender, address(this)) >= _amount, 
+            token.allowance(msg.sender, address(this)) >= _amount,
             "Marketplace: not enough approved tokens to marketplace. Call function 'approve' to grant permission to marketplace to dispose of tokens"
         );
         require(token.trySafeTransferFrom(msg.sender, address(this), _amount), "Marketplace: token transfer failed");
@@ -171,9 +166,9 @@ contract ERC20OrderBookMarketplace is ReentrancyGuard, ERC20MarketplaceFeeCalcul
             order.isSold = true;
         }
 
-        uint256 fee = calculateFee(requiredEth);
+        uint256 fee = calculator.calculateFee(requiredEth);
 
-        (bool feeSent, ) = payable(feeRecipient).call{value: fee}("");
+        (bool feeSent, ) = payable(calculator.feeRecipient()).call{value: fee}("");
         require(feeSent, "Marketplace: failed to send fee");
 
         userStorage.recordFeesPaid(msg.sender, fee);

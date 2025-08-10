@@ -6,11 +6,14 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "calculators/ERC721MarketplaceFeeCalculator.sol";
+import "calculators/CalculatorService.sol";
+import "storage/UserStorage.sol";
 
-abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard, ERC721MarketplaceFeeCalculator {
+abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard {
     address public owner;
     bool public paused;
+    UserStorage public userStorage;
+    CalculatorService public calculator;
 
     event Paused(bool indexed paused);
     event Withdraw(uint256 indexed amount);
@@ -27,18 +30,10 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard, ERC
         _;
     }
 
-    constructor(
-        address _feeRecipient,
-        uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _userStorage
-    ) ERC721MarketplaceFeeCalculator(
-        _feeRecipient,
-        _feePercentage,
-        _minFeeInUSD,
-        _userStorage
-    ) {
+    constructor(address _userStorage, address _calculatorServise) {
         owner = msg.sender;
+        userStorage = UserStorage(_userStorage);
+        calculator = CalculatorService(_calculatorServise);
     }
 
     receive() external payable {}

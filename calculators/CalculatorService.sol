@@ -2,10 +2,11 @@
 
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "storage/UserStorage.sol";
 
-abstract contract BaseFeeCalculator {
+contract CalculatorService {
     address private constant ETH_USD_MAINNET = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address private constant ETH_USD_SEPOLIA = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
     address private constant ETH_USD_HOLESKY = 0x1B392212b2E7fe038E8Daf2d389f2A3921A77ADA;
@@ -17,6 +18,7 @@ abstract contract BaseFeeCalculator {
     uint256 public feePercentage; 
     uint256 public minFeeInUSD; 
     uint256 public maxFeePercentage = 1000;
+    uint256 public maxRoyaltyPercentage = 5000;
     uint256 public staleThreshold = 3600; // 1 hour
     uint256 public maxStaleThreshold = 7200; // 2 hours
     uint256 public riskFactor = 10500; // 105%
@@ -25,6 +27,7 @@ abstract contract BaseFeeCalculator {
 
     event FeePercentageChanged(uint256 indexed oldPercentage, uint256 indexed newPercentage);
     event MinFeeInUSDChanged(uint256 indexed oldMinFee, uint256 indexed newMinFee);
+    event MaxRoyaltyPercentageChanged(uint256 indexed oldPercentage, uint256 indexed newPercentage);
     event FeeRecipientChanged(address indexed oldRecipient, address indexed newRecipient);
     event NetworkDetected(uint256 indexed chainId, address indexed priceFeed);
     event StaleThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
@@ -67,6 +70,7 @@ abstract contract BaseFeeCalculator {
         require(_feeRecipient != address(0), "Calculator: zero address");
         require(_feePercentage <= maxFeePercentage, "Calculator: invalid percentage");
         require(_minFeeInUSD > 0, "Calculator: min fee must be > 0");
+        require(_userStorage != address(0), "Calculator: zero address");
         
         feeRecipient = _feeRecipient;
         feePercentage = _feePercentage;
@@ -202,5 +206,61 @@ abstract contract BaseFeeCalculator {
             feePercentage,
             address(priceFeed)
         );
+    }
+
+    function calculateRoyalties(
+        address tokenAddress,
+        uint256 tokenId,
+        uint256 totalPrice
+    ) public view returns (uint256 royaltyAmount, address royaltyRecipient) {
+        if (tokenAddress.code.length == 0) {
+            return (0, address(0));
+        }
+        
+        if (!IERC165(tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
+            return (0, address(0));
+        }
+        
+        try IERC2981(tokenAddress).royaltyInfo(tokenId, totalPrice) returns (address recipient, uint256 amount) {
+            if (userStorage.getUserInfo(recipient).isBlacklistedRoyalty) {
+                return (0, address(0));
+            }
+            
+            uint256 maxAllowed = (totalPrice * maxRoyaltyPercentage) / 10000;
+            if (amount > maxAllowed) {
+                amount = maxAllowed;
+            }
+            
+            return (amount, recipient);
+        } 
+        catch {
+            return (0, address(0));
+        }
+    }
+
+    function calculateDistribution(
+        address tokenAddress,
+        uint256 tokenId,
+        uint256 totalPrice
+    ) public view returns (uint256, uint256, uint256, address) {
+        (uint256 royaltyAmount, address royaltyRecipient) = calculateRoyalties(tokenAddress, tokenId, totalPrice);
+        uint256 marketplaceFee = calculateFee(totalPrice); 
+
+        uint256 actualRoyalty = royaltyAmount > totalPrice ? totalPrice : royaltyAmount;
+        uint256 remaining = totalPrice - actualRoyalty;
+        uint256 actualMarketplaceFee = marketplaceFee > remaining ? remaining : marketplaceFee;
+        uint256 sellerAmount = remaining - actualMarketplaceFee;
+        
+        return (actualRoyalty, actualMarketplaceFee, sellerAmount, royaltyRecipient);
+    }
+
+    function setMaxRoyaltyPercentage(uint256 _maxRoyaltyPercentage) external calcOnlyOwner {
+        require(_maxRoyaltyPercentage <= 10000 && _maxRoyaltyPercentage > 0, "Calculator: invalid percentage");
+        require(_maxRoyaltyPercentage != maxRoyaltyPercentage, "Calculator: same percentage");
+        
+        uint256 oldPercentage = maxRoyaltyPercentage;
+        maxRoyaltyPercentage = _maxRoyaltyPercentage;
+
+        emit MaxRoyaltyPercentageChanged(oldPercentage, _maxRoyaltyPercentage);
     }
 }

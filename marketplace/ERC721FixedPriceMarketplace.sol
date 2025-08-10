@@ -10,7 +10,6 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         uint256 tokenId;
         uint256 price;
         address seller;
-        uint256 itemOnSaleFeePercentage;
         bool isSold;
         bool isCanceled;
     }
@@ -23,8 +22,7 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         address indexed tokenAddress,
         uint256 indexed tokenId,
         uint256 price,
-        address seller,
-        uint256 itemOnSaleFeePercentage
+        address seller
     );
     event BuyItem(
         uint256 indexed itemOnSaleId, 
@@ -45,17 +43,8 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         return !item.isSold && !item.isCanceled;
     }
 
-    constructor(
-        address _feeRecipient,
-        uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _userStorage
-    ) ERC721BaseMarketplace(
-        _feeRecipient,
-        _feePercentage,
-        _minFeeInUSD,
-        _userStorage
-    ) {}
+    constructor(address _userStorage, address _calculatorServise) 
+    ERC721BaseMarketplace(_userStorage, _calculatorServise) {}
 
     function listItem(address _tokenAddress, uint256 _tokenId, uint256 _price) external whenNotPaused {
         require(_price > 0, "Marketplace: price must be greater than 0");
@@ -75,7 +64,6 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
             tokenId: _tokenId,
             price: _price,
             seller: msg.sender,
-            itemOnSaleFeePercentage: feePercentage,
             isSold: false,
             isCanceled: false
         });
@@ -87,8 +75,7 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
             tokenAddress: _tokenAddress,
             tokenId: _tokenId,
             price: _price,
-            seller: msg.sender,
-            itemOnSaleFeePercentage: feePercentage
+            seller: msg.sender
         });
     }
 
@@ -106,7 +93,11 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
 
         uint256 totalPrice = item.price;
 
-        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount, address royaltyRecipient) = calculateDistribution(
+        (uint256 actualRoyalty, 
+        uint256 actualMarketplaceFee, 
+        uint256 sellerAmount, 
+        address royaltyRecipient) = 
+        calculator.calculateDistribution(
             item.tokenAddress, 
             item.tokenId, 
             totalPrice
@@ -120,7 +111,7 @@ contract ERC721FixedPriceMarketplace is ERC721BaseMarketplace {
         }
 
         if (actualMarketplaceFee > 0) {
-            (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
+            (bool feeSent, ) = payable(calculator.feeRecipient()).call{value: actualMarketplaceFee}("");
             require(feeSent, "Marketplace: failed to send fee");
             
             userStorage.recordFeesPaid(msg.sender, actualMarketplaceFee);

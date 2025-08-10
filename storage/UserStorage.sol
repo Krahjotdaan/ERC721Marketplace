@@ -130,7 +130,7 @@ contract UserStorage {
     }
     
     function getUserAddress(uint256 id) external view returns (address) {
-        require(id > 0 && id <= userCount, "UserStorage: invalid id");
+        require(id > 0 && id <= userCount);
         return userAddresses[id];
     }
     

@@ -49,17 +49,8 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
         return !auction.isCanceled && !auction.isCompleted;
     }
 
-    constructor(
-        address _feeRecipient,
-        uint256 _feePercentage,
-        uint256 _minFeeInUSD,
-        address _userStorage
-    ) ERC721BaseMarketplace(
-        _feeRecipient,
-        _feePercentage,
-        _minFeeInUSD,
-        _userStorage
-    ) {}
+    constructor(address _userStorage, address _calculatorServise) 
+    ERC721BaseMarketplace(_userStorage, _calculatorServise) {}
 
     function withdraw() external override onlyOwner {
         uint256 amount = address(this).balance - frozenEth;
@@ -177,7 +168,11 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
 
         uint256 totalPrice = auction.currentBid;
 
-        (uint256 actualRoyalty, uint256 actualMarketplaceFee, uint256 sellerAmount, address royaltyRecipient) = calculateDistribution(
+        (uint256 actualRoyalty, 
+        uint256 actualMarketplaceFee, 
+        uint256 sellerAmount, 
+        address royaltyRecipient) = 
+        calculator.calculateDistribution(
             auction.tokenAddress, 
             auction.tokenId, 
             totalPrice
@@ -191,7 +186,7 @@ contract ERC721AuctionMarketplace is ERC721BaseMarketplace {
         }
 
         if (actualMarketplaceFee > 0) {
-            (bool feeSent, ) = payable(feeRecipient).call{value: actualMarketplaceFee}("");
+            (bool feeSent, ) = payable(calculator.feeRecipient()).call{value: actualMarketplaceFee}("");
             require(feeSent, "Marketplace: failed to send fee");
             
             userStorage.recordFeesPaid(auction.currentBidder, actualMarketplaceFee);
