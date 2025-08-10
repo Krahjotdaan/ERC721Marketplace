@@ -26,6 +26,7 @@ contract UserStorage {
         uint256[] purchasedAuctions;
     }
 
+    address public owner;
     address public registry;
     uint256 public userCount;
     
@@ -33,7 +34,8 @@ contract UserStorage {
     mapping(uint256 => address) public userAddresses;
 
     event UserCreated(address indexed user);
-    event UserBlacklisted(address indexed user, bool isSeller, bool isRoyalty);
+    event SetSellerBlacklisted(address indexed user, bool isSeller);
+    event SetRoyaltyBlacklisted(address indexed user, bool isRoyalty);
     
     modifier onlyAuthorizedMarketplace() {
         require(
@@ -116,13 +118,24 @@ contract UserStorage {
         users[user].totalFeesPaid += amount;
     }
     
-    function setBlacklistStatus(address user, bool isSeller, bool isRoyalty) external onlyAuthorizedMarketplace {
+    function setSellerBlacklisted(address user, bool isSeller) external {
+        require(msg.sender == owner, "UserStorage: not owner");
+        require(users[user].isBlacklistedSeller != isSeller, "UserStorage: same status");
+
         _createUserIfNotExists(user);
-        
         users[user].isBlacklistedSeller = isSeller;
+
+        emit SetSellerBlacklisted(user, isSeller);    
+    }
+
+    function setRoyaltyBlacklisted(address user, bool isRoyalty) external {
+        require(msg.sender == owner, "UserStorage: not owner");
+        require(users[user].isBlacklistedRoyalty != isRoyalty, "UserStorage: same status");
+
+        _createUserIfNotExists(user);
         users[user].isBlacklistedRoyalty = isRoyalty;
 
-        emit UserBlacklisted(user, isSeller, isRoyalty);    
+        emit SetRoyaltyBlacklisted(user, isRoyalty);
     }
     
     function getUserInfo(address user) external view returns (UserInfo memory) {
