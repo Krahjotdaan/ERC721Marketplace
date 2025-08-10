@@ -30,8 +30,7 @@ contract UserStorage {
     uint256 public userCount;
     
     mapping(address => UserInfo) public users;
-    mapping(uint256 => address) public userIds;
-    mapping(address => bool) public authorizedContracts;
+    mapping(uint256 => address) public userAddresses;
 
     event UserCreated(address indexed user);
     event UserBlacklisted(address indexed user, bool isSeller, bool isRoyalty);
@@ -49,20 +48,12 @@ contract UserStorage {
         registry = _registry;
     }
     
-    function addAuthorizedContract(address contractAddress) external onlyAuthorizedMarketplace {
-        authorizedContracts[contractAddress] = true;
-    }
-    
-    function removeAuthorizedContract(address contractAddress) external onlyAuthorizedMarketplace {
-        authorizedContracts[contractAddress] = false;
-    }
-    
     function _createUserIfNotExists(address user) internal {
         if (!users[user].exists) {
             users[user].exists = true;
             
             userCount++;
-            userIds[userCount] = user;
+            userAddresses[userCount] = user;
 
             emit UserCreated(user);
         }
@@ -140,14 +131,14 @@ contract UserStorage {
     
     function getUserAddress(uint256 id) external view returns (address) {
         require(id > 0 && id <= userCount, "UserStorage: invalid id");
-        return userIds[id];
+        return userAddresses[id];
     }
     
     function getAllUsers() external view returns (address[] memory) {
         address[] memory allUsers = new address[](userCount);
         
         for (uint256 i = 0; i < userCount; i++) {
-            allUsers[i] = userIds[i + 1];
+            allUsers[i] = userAddresses[i + 1];
         }
 
         return allUsers;
@@ -161,7 +152,7 @@ contract UserStorage {
         uint256 totalFees
     ) {
         for (uint256 i = 1; i <= userCount; i++) {
-            address user = userIds[i];
+            address user = userAddresses[i];
             totalListings += users[user].listingsCount;
             totalAuctions += users[user].auctionsCreatedCount;
             totalPurchases += users[user].totalPurchases;

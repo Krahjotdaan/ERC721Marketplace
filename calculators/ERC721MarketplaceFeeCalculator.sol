@@ -69,7 +69,8 @@ abstract contract ERC721MarketplaceFeeCalculator is BaseFeeCalculator {
     }
 
     function setMaxRoyaltyPercentage(uint256 _maxRoyaltyPercentage) external calcOnlyOwner {
-        require(_maxRoyaltyPercentage <= 10000, "Calculator: invalid percentage");
+        require(_maxRoyaltyPercentage <= 10000 && _maxRoyaltyPercentage > 0, "Calculator: invalid percentage");
+        require(_maxRoyaltyPercentage != maxRoyaltyPercentage, "Calculator: same percentage");
         
         uint256 oldPercentage = maxRoyaltyPercentage;
         maxRoyaltyPercentage = _maxRoyaltyPercentage;

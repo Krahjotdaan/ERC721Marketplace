@@ -83,9 +83,37 @@ abstract contract ERC721BaseMarketplace is IERC721Receiver, ReentrancyGuard, ERC
         address _tokenAddress, 
         uint256 _tokenId
     ) external view returns(string memory, string memory, string memory) {
-        try IERC165(_tokenAddress).supportsInterface(type(IERC721Metadata).interfaceId) {
+        if (_tokenAddress.code.length == 0) {
+            return ("", "", "");
+        }
+        
+        try IERC165(_tokenAddress).supportsInterface(type(IERC721Metadata).interfaceId) returns (bool result) {
+            if (!result) {
+                return ("", "", "");
+            }
+            
             IERC721Metadata token = IERC721Metadata(_tokenAddress);
-            return (token.name(), token.symbol(), token.tokenURI(_tokenId));
+            
+            string memory name;
+            string memory symbol;
+            string memory uri;
+            
+            try token.name() returns (string memory n) {
+                name = n;
+            } 
+            catch {}
+            
+            try token.symbol() returns (string memory s) {
+                symbol = s;
+            } 
+            catch {}
+            
+            try token.tokenURI(_tokenId) returns (string memory u) {
+                uri = u;
+            } 
+            catch {}
+            
+            return (name, symbol, uri);
         } 
         catch {
             return ("", "", "");

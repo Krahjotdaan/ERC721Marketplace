@@ -17,6 +17,9 @@ abstract contract BaseFeeCalculator {
     uint256 public feePercentage; 
     uint256 public minFeeInUSD; 
     uint256 public maxFeePercentage = 1000;
+    uint256 public staleThreshold = 3600; // 1 hour
+    uint256 public maxStaleThreshold = 7200; // 2 hours
+    uint256 public riskFactor = 10500; // 105%
     UserStorage public userStorage;
     AggregatorV3Interface public priceFeed;
 
@@ -24,6 +27,9 @@ abstract contract BaseFeeCalculator {
     event MinFeeInUSDChanged(uint256 indexed oldMinFee, uint256 indexed newMinFee);
     event FeeRecipientChanged(address indexed oldRecipient, address indexed newRecipient);
     event NetworkDetected(uint256 indexed chainId, address indexed priceFeed);
+    event StaleThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
+    event MaxStaleThresholdChanged(uint256 indexed oldThreshold, uint256 indexed newThreshold);
+    event RiskFactorChanged(uint256 indexed oldRiskFactor, uint256 indexed newRiskFactor);
 
     modifier calcOnlyOwner() {
         require(msg.sender == feeRecipient, "Calculator: not owner");
@@ -72,11 +78,24 @@ abstract contract BaseFeeCalculator {
     }
 
     function getMinFeeInETH() public view returns (uint256) {
-        (, int256 price, , , ) = priceFeed.latestRoundData();
+        (, int256 price, , uint256 updatedAt, ) = priceFeed.latestRoundData();
+        uint256 timeSinceUpdate = block.timestamp - updatedAt;
+
+        if (timeSinceUpdate >= maxStaleThreshold) {
+            revert("Calculator: price data too stale, cannot proceed. Please wait for Chainlink to update.");
+        }
+        
+        uint256 priceInWei;
         uint8 decimals = priceFeed.decimals();
+
+        if (timeSinceUpdate >= staleThreshold) {
+            priceInWei = uint256(price) * 10 ** (18 - uint256(decimals));
+            uint256 conservativePrice = priceInWei * riskFactor / 10000;
         
-        uint256 priceInWei = uint256(price) * 10 ** (18 - uint256(decimals));
-        
+            return (minFeeInUSD * 10 ** 18) / conservativePrice;
+        }
+
+        priceInWei = uint256(price) * 10 ** (18 - uint256(decimals));
         return (minFeeInUSD * 10 ** 18) / priceInWei;
     }
 
@@ -91,6 +110,7 @@ abstract contract BaseFeeCalculator {
 
     function setFeePercentage(uint256 _feePercentage) external calcOnlyOwner {
         require(_feePercentage <= maxFeePercentage, "Calculator: invalid percentage");
+        require(_feePercentage != feePercentage, "Calculator: same fee");
 
         uint256 oldPercentage = feePercentage;
         feePercentage = _feePercentage;
@@ -100,6 +120,7 @@ abstract contract BaseFeeCalculator {
 
     function setMinFeeInUSD(uint256 _minFeeInUSD) external calcOnlyOwner {
         require(_minFeeInUSD > 0, "Calculator: min fee must be > 0");
+        require(_minFeeInUSD != minFeeInUSD, "Calculator: same min fee in USD");
 
         uint256 oldMinFee = minFeeInUSD;
         minFeeInUSD = _minFeeInUSD;
@@ -109,11 +130,63 @@ abstract contract BaseFeeCalculator {
 
     function setFeeRecipient(address _feeRecipient) external calcOnlyOwner {
         require(_feeRecipient != address(0), "Calculator: zero address");
+        require(_feeRecipient != feeRecipient, "Calculator: same recipient");
 
         address oldRecipient = feeRecipient;
         feeRecipient = _feeRecipient;
 
         emit FeeRecipientChanged(oldRecipient, _feeRecipient);
+    }
+
+    function setStaleThreshold(uint256 _staleThreshold) external calcOnlyOwner {
+        require(_staleThreshold > 0, "Calculator: stale threshold must be > 0");
+        require(_staleThreshold < maxStaleThreshold, "Calculator: stale threshold must be < max stale threshold");
+        require(_staleThreshold != staleThreshold, "Calculator: same stale threshold");
+
+        uint256 oldStaleThreshold = staleThreshold;
+        staleThreshold = _staleThreshold;
+
+        emit StaleThresholdChanged(oldStaleThreshold, staleThreshold);
+    }
+
+    function setMaxStaleThreshold(uint256 _maxStaleThreshold) external calcOnlyOwner {
+        require(_maxStaleThreshold > _maxStaleThreshold, "Calculator: max stale threshold must be > stale threshold");
+        require(_maxStaleThreshold != maxStaleThreshold, "Calculator: same max stale threshold");
+
+        uint256 oldMaxStaleThreshold = maxStaleThreshold;
+        maxStaleThreshold = _maxStaleThreshold;
+
+        emit MaxStaleThresholdChanged(oldMaxStaleThreshold, maxStaleThreshold);
+    }
+
+    function setRiskFactor(uint256 _riskFactor) external calcOnlyOwner {
+        require(_riskFactor >= 10000, "Calculator: risk factor must be >= 100%");
+        require(_riskFactor <= 11000, "Calculator: risk factor must be <= 110%");
+        require(_riskFactor != riskFactor, "Calculator: same risk factor");
+
+        uint256 oldRiskFactor = riskFactor;
+        riskFactor = _riskFactor;
+
+        emit RiskFactorChanged(oldRiskFactor, riskFactor);
+    }
+
+    function getPriceFeedStatus() external view returns (
+        uint256 price,
+        uint256 updatedAt,
+        uint256 timeSinceUpdate,
+        bool isStale,
+        bool isTooStale
+    ) {
+        (, int256 currentPrice, , uint256 _updatedAt, ) = priceFeed.latestRoundData();
+        uint256 _timeSinceUpdate = block.timestamp - updatedAt;
+        
+        return (
+            uint256(currentPrice),
+            _updatedAt,
+            _timeSinceUpdate,
+            _timeSinceUpdate >= staleThreshold,
+            _timeSinceUpdate >= maxStaleThreshold
+        );
     }
 
     function getFeeInfo() external view returns (uint256, uint256, uint256, uint256, address) {
