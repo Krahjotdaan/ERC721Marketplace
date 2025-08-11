@@ -2,6 +2,8 @@
 
 A comprehensive, secure, and scalable marketplace platform for ERC-721 NFTs and ERC-20 tokens with support for fixed-price listings and auctions.
 
+[Read this in Russian](README-RU.md)
+
 ## Overview
 
 This platform provides a complete ecosystem for NFT and token trading with the following key components:
